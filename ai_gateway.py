@@ -95,7 +95,7 @@ async def gateway_stt(
                 elif filename.endswith(".wav"):
                     mime_type = "audio/wav"
                 elif filename.endswith(".m4a"):
-                    mime_type = "audio/m4a"
+                    mime_type = "audio/mp4"
                 elif filename.endswith(".ogg"):
                     mime_type = "audio/ogg"
                 elif filename.endswith(".flac"):
@@ -108,6 +108,9 @@ async def gateway_stt(
                     mime_type = "audio/webm"
                 else:
                     mime_type = "application/octet-stream"
+            else:
+                # strip parameters like ;codecs=opus to keep only type/subtype
+                mime_type = mime_type.split(";")[0].strip()
 
             # set duration for MP3 only (others like webm/opus are VBR and need proper probing)
             if mime_type == "audio/mpeg" or (audio_file.filename or "").lower().endswith(".mp3"):
@@ -140,6 +143,12 @@ async def gateway_stt(
 
             # ASR timing
             asr_start = time.time()
+            # Log only the header part of data URL (before comma) and base64 length to reduce noise
+            try:
+                data_url_header = audio_data_url.split(",", 1)[0]
+                logger.info("Audio data URL header: %s, base64_len=%d", data_url_header, len(audio_base64))
+            except Exception:
+                pass
             logger.info("Posting to %s with headers=%s payload=%s", target_url, headers, payload)
             response = requests.post(
                 target_url,
@@ -147,6 +156,10 @@ async def gateway_stt(
                 headers=headers,
                 timeout=300
             )
+            try:
+                logger.info("Upstream response status=%s body=%s", response.status_code, response.text[:1000])
+            except Exception:
+                pass
             asr_time = round((time.time() - asr_start) * 1000, 3)
 
             # extract text from response
