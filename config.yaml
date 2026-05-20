@@ -1,0 +1,7 @@
+model_url_map:
+  vnp/stt_a1: "https://ai.vnpost.vn/voiceai/core/stt/v1/transcript"
+  vnp/stt_b1: "https://ai.vnpost.vn/voiceai/core/stt/exp/run/qwen/qwen3-asr-1.7b"
+
+server:
+  host: "0.0.0.0"
+  port: 13084

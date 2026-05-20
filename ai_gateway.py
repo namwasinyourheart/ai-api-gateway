@@ -1,0 +1,145 @@
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi.responses import JSONResponse, PlainTextResponse
+import requests
+import base64
+import uvicorn
+import re
+import time
+from omegaconf import OmegaConf
+
+app = FastAPI()
+
+# Load configuration from YAML
+config = OmegaConf.load("config.yaml")
+MODEL_URL_MAP = dict(config.model_url_map)
+SERVER_HOST = config.server.host
+SERVER_PORT = config.server.port
+
+
+@app.post("/gateway/stt")
+async def gateway_stt(
+    audio_file: UploadFile = File(...),
+    model_name: str = Form("vnp/stt_a1"),
+    enhance_speech: bool = Form(True),
+    postprocess_text: bool = Form(True),
+):
+    try:
+        # check model_name mapping
+        if model_name not in MODEL_URL_MAP:
+            raise HTTPException(status_code=400, detail=f"Model '{model_name}' not supported")
+
+        target_url = MODEL_URL_MAP[model_name]
+
+        # vnp/stt_a1: simple forward
+        if model_name == "vnp/stt_a1":
+            
+            audio_bytes = await audio_file.read()
+
+            files = {"audio_file": (audio_file.filename, audio_bytes, audio_file.content_type)}
+            data = {
+                "model_name": model_name,
+                "enhance_speech": str(enhance_speech).lower(),
+                "postprocess_text": str(postprocess_text).lower()
+            }
+
+            response = requests.post(target_url, files=files, data=data, timeout=300)
+
+            return JSONResponse(
+                status_code=response.status_code,
+                content=response.json()
+            )
+
+        # vnp/stt_b1: special processing
+        if model_name == "vnp/stt_b1":
+
+            total_start_time = time.time()
+
+            # speech enhancement timing
+            speech_enhancement_start = time.time()
+            speech_enhancement_time = None
+            enhance_speech = False
+            if enhance_speech:
+                # placeholder for speech enhancement
+                speech_enhancement_time = (time.time() - speech_enhancement_start) * 1000
+
+            # read audio bytes
+            audio_bytes = await audio_file.read()
+
+            # calculate audio duration (rough estimate based on file size and assumed bitrate)
+            # for MP3, typical bitrate is 128 kbps, so duration = (bytes * 8) / (128 * 1000)
+            audio_duration_ms = (len(audio_bytes) * 8) / (128 * 1000) * 1000
+
+            # encode base64
+            audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+
+            # mime type
+            mime_type = audio_file.content_type or "audio/mpeg"
+
+            # data url format
+            audio_data_url = f"data:{mime_type};base64,{audio_base64}"
+
+            payload = {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "audio_url",
+                                "audio_url": {
+                                    "url": audio_data_url
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "stream": False
+            }
+
+            headers = {
+                "accept": "application/json",
+                "content-type": "application/json"
+            }
+
+            # ASR timing
+            asr_start = time.time()
+            response = requests.post(
+                target_url,
+                json=payload,
+                headers=headers,
+                timeout=300
+            )
+            asr_time = (time.time() - asr_start) * 1000
+
+            # extract text from response
+            response_data = response.json()
+            content = response_data["choices"][0]["message"]["content"]
+
+            # text postprocessing timing
+            postprocess_start = time.time()
+            # extract text between <asr_text> tags
+            match = re.search(r"<asr_text>(.*)", content, re.DOTALL)
+            if match:
+                transcribed_text = match.group(1).strip()
+            else:
+                transcribed_text = content
+            text_postprocessing_time = (time.time() - postprocess_start) * 1000
+
+            total_processing_time = (time.time() - total_start_time) * 1000
+
+            result = {
+                "text": transcribed_text,
+                "duration": audio_duration_ms,
+                "total_processing_time": total_processing_time,
+                "speech_enhancement_time": speech_enhancement_time,
+                "asr_time": asr_time,
+                "text_postprocessing_time": text_postprocessing_time
+            }
+
+            return JSONResponse(content=result)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)
