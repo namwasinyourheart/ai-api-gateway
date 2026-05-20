@@ -66,7 +66,7 @@ async def gateway_stt(
             enhance_speech = False
             if enhance_speech:
                 # placeholder for speech enhancement
-                speech_enhancement_time = (time.time() - speech_enhancement_start) * 1000
+                speech_enhancement_time = round((time.time() - speech_enhancement_start) * 1000, 3)
 
             # read audio bytes
             audio_bytes = await audio_file.read()
@@ -114,7 +114,7 @@ async def gateway_stt(
                 headers=headers,
                 timeout=300
             )
-            asr_time = (time.time() - asr_start) * 1000
+            asr_time = round((time.time() - asr_start) * 1000, 3)
 
             # extract text from response
             response_data = response.json()
@@ -128,9 +128,9 @@ async def gateway_stt(
                 transcribed_text = match.group(1).strip()
             else:
                 transcribed_text = content
-            text_postprocessing_time = (time.time() - postprocess_start) * 1000
+            text_postprocessing_time = round((time.time() - postprocess_start) * 1000, 3)
 
-            total_processing_time = (time.time() - total_start_time) * 1000
+            total_processing_time = round((time.time() - total_start_time) * 1000, 3)
 
             result = {
                 "model_name": model_name,
