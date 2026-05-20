@@ -3,6 +3,7 @@ version: '3.8'
 services:
   ai-api-gateway:
     image: ai-api-gateway
+    container_name: ai-api-gateway
     build: .
     ports:
       - "13101:13101"
