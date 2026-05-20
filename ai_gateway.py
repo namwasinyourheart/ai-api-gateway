@@ -6,6 +6,9 @@ import uvicorn
 import re
 import time
 import logging
+import subprocess
+import tempfile
+import os
 from omegaconf import OmegaConf
 
 app = FastAPI()
@@ -83,9 +86,6 @@ async def gateway_stt(
             # for MP3, typical bitrate is 128 kbps, so duration = (bytes * 8) / (128 * 1000)
             audio_duration_ms = None
 
-            # encode base64
-            audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
-
             # mime type
             mime_type = audio_file.content_type
             if not mime_type:
@@ -112,11 +112,41 @@ async def gateway_stt(
                 # strip parameters like ;codecs=opus to keep only type/subtype
                 mime_type = mime_type.split(";")[0].strip()
 
+            needs_transcode = mime_type in ("audio/webm", "audio/ogg", "audio/opus")
+            if needs_transcode:
+                try:
+                    logger.info("Transcoding input audio from %s to audio/wav (16kHz mono) via ffmpeg", mime_type)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as fin:
+                        fin.write(audio_bytes)
+                        in_path = fin.name
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as fout:
+                        out_path = fout.name
+                    cmd = [
+                        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                        "-i", in_path, "-ar", "16000", "-ac", "1", "-f", "wav", out_path
+                    ]
+                    proc = subprocess.run(cmd, capture_output=True)
+                    if proc.returncode != 0:
+                        raise HTTPException(status_code=400, detail=f"Audio format not supported: {mime_type}. ffmpeg error: {proc.stderr.decode(errors='ignore')[:500]}")
+                    with open(out_path, "rb") as f:
+                        audio_bytes = f.read()
+                    mime_type = "audio/wav"
+                finally:
+                    try:
+                        os.remove(in_path)
+                    except Exception:
+                        pass
+                    try:
+                        os.remove(out_path)
+                    except Exception:
+                        pass
+
             # set duration for MP3 only (others like webm/opus are VBR and need proper probing)
             if mime_type == "audio/mpeg" or (audio_file.filename or "").lower().endswith(".mp3"):
                 audio_duration_ms = (len(audio_bytes) * 8) / (128 * 1000) * 1000
 
             # data url format
+            audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
             audio_data_url = f"data:{mime_type};base64,{audio_base64}"
 
             payload = {
