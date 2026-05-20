@@ -5,6 +5,7 @@ import base64
 import uvicorn
 import re
 import time
+import logging
 from omegaconf import OmegaConf
 
 app = FastAPI()
@@ -14,6 +15,8 @@ config = OmegaConf.load("config.yaml")
 MODEL_URL_MAP = dict(config.model_url_map)
 SERVER_HOST = config.server.host
 SERVER_PORT = config.server.port
+
+logger = logging.getLogger("uvicorn.error")
 
 
 @app.get("/health")
@@ -137,6 +140,7 @@ async def gateway_stt(
 
             # ASR timing
             asr_start = time.time()
+            logger.info("Posting to %s with headers=%s payload=%s", target_url, headers, payload)
             response = requests.post(
                 target_url,
                 json=payload,
