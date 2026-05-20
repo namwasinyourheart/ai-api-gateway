@@ -16,6 +16,11 @@ SERVER_HOST = config.server.host
 SERVER_PORT = config.server.port
 
 
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
+
 @app.post("/gateway/stt")
 async def gateway_stt(
     audio_file: UploadFile = File(...),
