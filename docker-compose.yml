@@ -6,7 +6,7 @@ services:
     container_name: ai-api-gateway
     build: .
     ports:
-      - "13101:13101"
+      - "13102:13102"
     volumes:
       - .:/app
 
