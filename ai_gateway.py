@@ -76,15 +76,39 @@ async def gateway_stt(
             # read audio bytes
             audio_bytes = await audio_file.read()
 
-            # calculate audio duration (rough estimate based on file size and assumed bitrate)
+            # calculate audio duration (only for MP3 using rough bitrate estimate)
             # for MP3, typical bitrate is 128 kbps, so duration = (bytes * 8) / (128 * 1000)
-            audio_duration_ms = (len(audio_bytes) * 8) / (128 * 1000) * 1000
+            audio_duration_ms = None
 
             # encode base64
             audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
 
             # mime type
-            mime_type = audio_file.content_type or "audio/mpeg"
+            mime_type = audio_file.content_type
+            if not mime_type:
+                filename = (audio_file.filename or "").lower()
+                if filename.endswith(".mp3"):
+                    mime_type = "audio/mpeg"
+                elif filename.endswith(".wav"):
+                    mime_type = "audio/wav"
+                elif filename.endswith(".m4a"):
+                    mime_type = "audio/m4a"
+                elif filename.endswith(".ogg"):
+                    mime_type = "audio/ogg"
+                elif filename.endswith(".flac"):
+                    mime_type = "audio/flac"
+                elif filename.endswith(".aac"):
+                    mime_type = "audio/aac"
+                elif filename.endswith(".opus"):
+                    mime_type = "audio/opus"
+                elif filename.endswith(".webm"):
+                    mime_type = "audio/webm"
+                else:
+                    mime_type = "application/octet-stream"
+
+            # set duration for MP3 only (others like webm/opus are VBR and need proper probing)
+            if mime_type == "audio/mpeg" or (audio_file.filename or "").lower().endswith(".mp3"):
+                audio_duration_ms = (len(audio_bytes) * 8) / (128 * 1000) * 1000
 
             # data url format
             audio_data_url = f"data:{mime_type};base64,{audio_base64}"
