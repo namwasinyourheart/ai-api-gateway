@@ -44,9 +44,15 @@ async def gateway_stt(
 
             response = requests.post(target_url, files=files, data=data, timeout=300)
 
+            upstream_response = response.json()
+            
+            # Reorder to match vnp/stt_b1 structure: model_name first
+            response_data = {"model_name": model_name}
+            response_data.update(upstream_response)
+
             return JSONResponse(
                 status_code=response.status_code,
-                content=response.json()
+                content=response_data
             )
 
         # vnp/stt_b1: special processing
@@ -127,6 +133,7 @@ async def gateway_stt(
             total_processing_time = (time.time() - total_start_time) * 1000
 
             result = {
+                "model_name": model_name,
                 "text": transcribed_text,
                 "duration": audio_duration_ms,
                 "total_processing_time": total_processing_time,
